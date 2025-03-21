@@ -1,15 +1,31 @@
-import { View, Text, StyleSheet, TextInput, Pressable } from "react-native";
-import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  ScrollView,
+} from "react-native";
+import React, { useContext, useState } from "react";
 import Colors from "../../constants/Colors";
 import Button from "../../components/Shared/Button";
-import { GenerateTopicsAIModel } from "../config/AiModel";
+import {
+  GenerateCourseAIModel,
+  GenerateTopicsAIModel,
+} from "../config/AiModel";
+import { UserDetailContext } from "./../../context/UserDetailContext";
+import { db } from "./../config/firebaseConfig";
 import Prompt from "../../constants/Prompt";
+import { doc, setDoc } from "firebase/firestore";
+import { useRouter } from "expo-router";
 
 export default function AddCourse() {
   const [loading, setLoading] = useState(false);
   const [userInput, setUserInput] = useState();
+  const { userDetail, setUserDetail } = useContext(UserDetailContext);
   const [topics, setTopics] = useState([]);
   const [selectedTopic, setSelectedTopic] = useState([]);
+  const router = useRouter();
   const onGenerateTopic = async () => {
     setLoading(true);
     //Get Topic ideas from AI model
@@ -34,8 +50,75 @@ export default function AddCourse() {
     const selection = selectedTopic.find((item) => item == topic);
     return selection ? true : false;
   };
+
+  /*---used to Generate course using AI model---*/
+  // const onGenerateCourse = async () => {
+  //   setLoading(true);
+  //   const PROMPT = selectedTopic + Prompt.COURSE;
+  //   try {
+  //     const aiResp = await GenerateCourseAIModel.sendMessage(PROMPT);
+  //     const resp = JSON.parse(aiResp.response.text());
+  //     const courses = resp.courses;
+  //     console.log("Generated Courses:", courses);
+  //     //save course in to database
+  //     courses?.forEach(async (course) => {
+  //       await setDoc(doc(db, "Courses", Date.now().toString()), {
+  //         ...course,
+  //         createdOn: new Date(),
+  //         createdBy: userDetail?.email,
+  //       });
+  //       console.log("Course saved successfully:", course);
+  //     });
+  //     router.push("/home");
+  //     setLoading(false);
+  //   } catch (e) {
+  //     setLoading(false);
+  //   }
+  // };
+  const onGenerateCourse = async () => {
+    setLoading(true);
+    const PROMPT = selectedTopic + Prompt.COURSE;
+
+    try {
+      const aiResp = await GenerateCourseAIModel.sendMessage(PROMPT);
+
+      // ✅ Parse AI response correctly
+      const resp = JSON.parse(aiResp.response.text());
+
+      // ✅ Check if response is an array
+      const courses = Array.isArray(resp) ? resp : resp.courses;
+
+      // ✅ Log the courses to debug
+      console.log("Generated Courses:", courses);
+
+      if (!courses || courses.length === 0) {
+        console.error("No valid courses generated.");
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Save courses in Firestore
+      await Promise.all(
+        courses.map(async (course) => {
+          await setDoc(doc(db, "Courses", Date.now().toString()), {
+            ...course,
+            createdOn: new Date(),
+            createdBy: userDetail?.email,
+          });
+          console.log("Course saved successfully:", course);
+        })
+      );
+
+      router.push("/home");
+      setLoading(false);
+    } catch (e) {
+      console.error("Error:", e);
+      setLoading(false);
+    }
+  };
+
   return (
-    <View
+    <ScrollView
       style={{
         padding: 25,
         display: "flex",
@@ -87,6 +170,7 @@ export default function AddCourse() {
       <View
         style={{
           marginTop: 15,
+          marginBottom: 15,
         }}
       >
         <Text
@@ -133,7 +217,7 @@ export default function AddCourse() {
           loading={loading}
         />
       )}
-    </View>
+    </ScrollView>
   );
 }
 const styles = StyleSheet.create({
